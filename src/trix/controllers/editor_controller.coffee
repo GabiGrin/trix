@@ -69,14 +69,16 @@ class Trix.EditorController extends Trix.Controller
     @editorElement.notify("attachment-edit", attachment: managedAttachment)
     @editorElement.notify("change")
 
+  compositionDidChangeAttachmentPreviewURL: (attachment) ->
+    @compositionController.invalidateViewForObject(attachment)
+    @editorElement.notify("change")
+
   compositionDidRemoveAttachment: (attachment) ->
     managedAttachment = @attachmentManager.unmanageAttachment(attachment)
     @editorElement.notify("attachment-remove", attachment: managedAttachment)
 
   compositionDidStartEditingAttachment: (attachment) ->
-    document = @composition.document
-    attachmentRange = document.getRangeOfAttachment(attachment)
-    @attachmentLocationRange = document.locationRangeFromRange(attachmentRange)
+    @attachmentLocationRange = @composition.document.getLocationRangeOfAttachment(attachment)
     @compositionController.installAttachmentEditorForAttachment(attachment)
     @selectionManager.setLocationRange(@attachmentLocationRange)
 
@@ -87,7 +89,7 @@ class Trix.EditorController extends Trix.Controller
   compositionDidRequestChangingSelectionToLocationRange: (locationRange) ->
     return if @loadingSnapshot and not @isFocused()
     @requestedLocationRange = locationRange
-    @documentWhenLocationRangeRequested = @composition.document
+    @compositionRevisionWhenLocationRangeRequested = @composition.revision
     @render() unless @handlingInput
 
   compositionWillLoadSnapshot: ->
@@ -124,13 +126,16 @@ class Trix.EditorController extends Trix.Controller
 
   compositionControllerDidRender: ->
     if @requestedLocationRange?
-      if @documentWhenLocationRangeRequested.isEqualTo(@composition.document)
+      if @compositionRevisionWhenLocationRangeRequested is @composition.revision
         @selectionManager.setLocationRange(@requestedLocationRange)
-
-      @composition.updateCurrentAttributes()
       @requestedLocationRange = null
-      @documentWhenLocationRangeRequested = null
-    @editorElement.notify("render")
+      @compositionRevisionWhenLocationRangeRequested = null
+
+    unless @renderedCompositionRevision is @composition.revision
+      @composition.updateCurrentAttributes()
+      @editorElement.notify("render")
+
+    @renderedCompositionRevision = @composition.revision
 
   compositionControllerDidFocus: ->
     @toolbarController.hideDialog()
@@ -143,8 +148,8 @@ class Trix.EditorController extends Trix.Controller
     @composition.editAttachment(attachment)
 
   compositionControllerDidRequestDeselectingAttachment: (attachment) ->
-    if @attachmentLocationRange
-      @selectionManager.setLocationRange(@attachmentLocationRange[1])
+    locationRange = @attachmentLocationRange ? @composition.document.getLocationRangeOfAttachment(attachment)
+    @selectionManager.setLocationRange(locationRange[1])
 
   compositionControllerWillUpdateAttachment: (attachment) ->
     @editor.recordUndoEntry("Edit Attachment", context: attachment.id, consolidatable: true)
@@ -167,6 +172,12 @@ class Trix.EditorController extends Trix.Controller
       @requestedRender = false
       @render()
 
+  inputControllerDidAllowUnhandledInput: ->
+    @editorElement.notify("change")
+
+  inputControllerDidRequestReparse: ->
+    @reparse()
+
   inputControllerWillPerformTyping: ->
     @recordTypingUndoEntry()
 
@@ -181,9 +192,7 @@ class Trix.EditorController extends Trix.Controller
     range = @pastedRange
     @pastedRange = null
     @pasting = null
-
     @editorElement.notify("paste", {pasteData, range})
-    @render()
 
   inputControllerWillMoveText: ->
     @editor.recordUndoEntry("Move")
@@ -278,12 +287,18 @@ class Trix.EditorController extends Trix.Controller
       perform: -> @editor.redo()
     link:
       test: -> @editor.canActivateAttribute("href")
-    increaseBlockLevel:
-      test: -> @editor.canIncreaseIndentationLevel()
-      perform: -> @editor.increaseIndentationLevel() and @render()
-    decreaseBlockLevel:
-      test: -> @editor.canDecreaseIndentationLevel()
-      perform: -> @editor.decreaseIndentationLevel() and @render()
+    increaseNestingLevel:
+      test: -> @editor.canIncreaseNestingLevel()
+      perform: -> @editor.increaseNestingLevel() and @render()
+    decreaseNestingLevel:
+      test: -> @editor.canDecreaseNestingLevel()
+      perform: -> @editor.decreaseNestingLevel() and @render()
+    increaseBlockLevel: # deprecated in favor of increaseNestingLevel
+      test: -> @editor.canIncreaseNestingLevel()
+      perform: -> @editor.increaseNestingLevel() and @render()
+    decreaseBlockLevel: # deprecated in favor of decreaseNestingLevel
+      test: -> @editor.canDecreaseNestingLevel()
+      perform: -> @editor.decreaseNestingLevel() and @render()
 
   canInvokeAction: (actionName) ->
     if @actionIsExternal(actionName)

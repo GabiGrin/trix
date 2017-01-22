@@ -1,7 +1,7 @@
 #= require trix/controllers/attachment_editor_controller
 #= require trix/views/document_view
 
-{handleEvent, tagName, findClosestElementFromNode, innerElementIsActive, defer}  = Trix
+{handleEvent, innerElementIsActive, defer}  = Trix
 
 {attachmentSelector} = Trix.AttachmentView
 
@@ -16,15 +16,21 @@ class Trix.CompositionController extends Trix.BasicObject
     handleEvent "click", onElement: @element, matchingSelector: "a#{attachmentSelector}", preventDefault: true
 
   didFocus: (event) =>
-    unless @focused
-      @focused = true
-      @delegate?.compositionControllerDidFocus?()
+    perform = =>
+      unless @focused
+        @focused = true
+        @delegate?.compositionControllerDidFocus?()
+
+    @blurPromise?.then(perform) ? perform()
 
   didBlur: (event) =>
-    defer =>
-      unless innerElementIsActive(@element)
-        @focused = null
-        @delegate?.compositionControllerDidBlur?()
+    @blurPromise = new Promise (resolve) =>
+      defer =>
+        unless innerElementIsActive(@element)
+          @focused = null
+          @delegate?.compositionControllerDidBlur?()
+        @blurPromise = null
+        resolve()
 
   didClickAttachment: (event, target) =>
     attachment = @findAttachmentForElement(target)
@@ -45,8 +51,11 @@ class Trix.CompositionController extends Trix.BasicObject
     @delegate?.compositionControllerDidRender?()
 
   rerenderViewForObject: (object) ->
-    @documentView.invalidateViewForObject(object)
+    @invalidateViewForObject(object)
     @render()
+
+  invalidateViewForObject: (object) ->
+    @documentView.invalidateViewForObject(object)
 
   isViewCachingEnabled: ->
     @documentView.isViewCachingEnabled()

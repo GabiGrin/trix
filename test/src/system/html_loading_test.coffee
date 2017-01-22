@@ -47,3 +47,16 @@ testGroup "HTML loading", ->
       assert.textAttributes([1, 2], bold: true)
       assert.blockAttributes([0, 2], ["bulletList","bullet"])
       expectDocument("ab\n")
+
+    test "newline in <li> with font-weight: bold", (expectDocument) ->
+      getEditor().loadHTML("<ul><li>a<br>b</li></ul>")
+      assert.textAttributes([0, 2], {})
+      assert.blockAttributes([0, 2], ["bulletList","bullet"])
+      expectDocument("a\nb\n")
+
+  testGroup "in a table", template: "editor_in_table", ->
+    test "block elements", (expectDocument) ->
+      getEditor().loadHTML("<h1>a</h1><blockquote>b</blockquote>")
+      assert.blockAttributes([0, 2], ["heading1"])
+      assert.blockAttributes([2, 4], ["quote"])
+      expectDocument("a\nb\n")

@@ -45,6 +45,9 @@ class Trix.HTMLParser extends Trix.BasicObject
     @containerElement.parentNode.removeChild(@containerElement)
 
   sanitizeHTML = (html) ->
+    # Remove everything after </html>
+    html = html.replace(/<\/html[^>]*>[^]*$/i, "</html>")
+
     doc = document.implementation.createHTMLDocument("")
     doc.documentElement.innerHTML = html
     {body, head} = doc
@@ -59,7 +62,7 @@ class Trix.HTMLParser extends Trix.BasicObject
       node = walker.currentNode
       switch node.nodeType
         when Node.ELEMENT_NODE
-          if tagName(node) is "script"
+          if elementIsRemovable(node)
             nodesToRemove.push(node)
           else
             for {name} in [node.attributes...]
@@ -72,6 +75,11 @@ class Trix.HTMLParser extends Trix.BasicObject
       node.parentNode.removeChild(node)
 
     body.innerHTML
+
+  elementIsRemovable = (element) ->
+    return unless element?.nodeType is Node.ELEMENT_NODE
+    return if nodeIsAttachmentElement(element)
+    tagName(element) is "script" or element.getAttribute("data-trix-serialize") is "false"
 
   nodeFilter = (node) ->
     if tagName(node) is "style"
@@ -88,11 +96,11 @@ class Trix.HTMLParser extends Trix.BasicObject
         @processElement(node)
 
   appendBlockForElement: (element) ->
-    elementIsBlockElement = isBlockElement(element)
+    elementIsBlockElement = @isBlockElement(element)
     currentBlockContainsElement = elementContainsNode(@currentBlockElement, element)
 
-    if elementIsBlockElement and not isBlockElement(element.firstChild)
-      unless isInsignificantTextNode(element.firstChild) and isBlockElement(element.firstElementChild)
+    if elementIsBlockElement and not @isBlockElement(element.firstChild)
+      unless @isInsignificantTextNode(element.firstChild) and @isBlockElement(element.firstElementChild)
         attributes = @getBlockAttributes(element)
         unless currentBlockContainsElement and arraysAreEqual(attributes, @currentBlock.attributes)
           @currentBlock = @appendBlockForAttributesWithElement(attributes, element)
@@ -115,7 +123,7 @@ class Trix.HTMLParser extends Trix.BasicObject
     null
 
   processTextNode: (node) ->
-    unless isInsignificantTextNode(node)
+    unless @isInsignificantTextNode(node)
       string = node.data
       unless elementCanDisplayPreformattedText(node.parentNode)
         string = squishBreakableWhitespace(string)
@@ -208,12 +216,12 @@ class Trix.HTMLParser extends Trix.BasicObject
   getTextAttributes: (element) ->
     attributes = {}
     for attribute, config of Trix.config.textAttributes
-      if config.tagName and findClosestElementFromNode(element, matchingSelector: config.tagName)
+      if config.tagName and findClosestElementFromNode(element, matchingSelector: config.tagName, untilNode: @containerElement)
         attributes[attribute] = true
       else if config.parser
         if value = config.parser(element)
           attributeInheritedFromBlock = false
-          for blockElement in @findBlockElementAncestors(element.firstChild)
+          for blockElement in @findBlockElementAncestors(element)
             if config.parser(blockElement) is value
               attributeInheritedFromBlock = true
               break
@@ -221,7 +229,7 @@ class Trix.HTMLParser extends Trix.BasicObject
             attributes[attribute] = value
 
     if nodeIsAttachmentElement(element)
-      if json = element.dataset.trixAttributes
+      if json = element.getAttribute("data-trix-attributes")
         for key, value of JSON.parse(json)
           attributes[key] = value
 
@@ -247,7 +255,7 @@ class Trix.HTMLParser extends Trix.BasicObject
     ancestors
 
   getAttachmentAttributes = (element) ->
-    JSON.parse(element.dataset.trixAttachment)
+    JSON.parse(element.getAttribute("data-trix-attachment"))
 
   getImageDimensions = (element) ->
     width = element.getAttribute("width")
@@ -258,21 +266,20 @@ class Trix.HTMLParser extends Trix.BasicObject
     dimensions
 
   # Element inspection
-
-  isBlockElement = (element) ->
+  isBlockElement: (element) ->
     return unless element?.nodeType is Node.ELEMENT_NODE
-    return if findClosestElementFromNode(element, matchingSelector: "td")
+    return if findClosestElementFromNode(element, matchingSelector: "td", untilNode: @containerElement)
     tagName(element) in getBlockTagNames() or window.getComputedStyle(element).display is "block"
 
-  isInsignificantTextNode = (node) ->
+  isInsignificantTextNode: (node) ->
     return unless node?.nodeType is Node.TEXT_NODE
     return unless stringIsAllBreakableWhitespace(node.data)
     return if elementCanDisplayPreformattedText(node.parentNode)
-    not node.previousSibling or isBlockElement(node.previousSibling) or not node.nextSibling or isBlockElement(node.nextSibling)
+    not node.previousSibling or @isBlockElement(node.previousSibling) or not node.nextSibling or @isBlockElement(node.nextSibling)
 
-  isExtraBR = (element) ->
+  isExtraBR: (element) ->
     tagName(element) is "br" and
-      isBlockElement(element.parentNode) and
+      @isBlockElement(element.parentNode) and
       element.parentNode.lastChild is element
 
   elementCanDisplayPreformattedText = (element) ->
