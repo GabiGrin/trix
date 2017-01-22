@@ -116,7 +116,7 @@ class Trix.HTMLParser extends Trix.BasicObject
   findParentBlockElement: (element) ->
     {parentElement} = element
     while parentElement and parentElement isnt @containerElement
-      if isBlockElement(parentElement) and parentElement in @blockElements
+      if @isBlockElement(parentElement) and parentElement in @blockElements
         return parentElement
       else
         {parentElement} = parentElement
@@ -266,6 +266,7 @@ class Trix.HTMLParser extends Trix.BasicObject
     dimensions
 
   # Element inspection
+
   isBlockElement: (element) ->
     return unless element?.nodeType is Node.ELEMENT_NODE
     return if findClosestElementFromNode(element, matchingSelector: "td", untilNode: @containerElement)
