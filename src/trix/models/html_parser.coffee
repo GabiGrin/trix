@@ -143,7 +143,7 @@ class Trix.HTMLParser extends Trix.BasicObject
     else
       switch tagName(element)
         when "br"
-          unless isExtraBR(element) or isBlockElement(element.nextSibling)
+          unless @isExtraBR(element) or @isBlockElement(element.nextSibling)
             @appendStringWithAttributes("\n", @getTextAttributes(element))
           @processedElements.push(element)
         when "img"
