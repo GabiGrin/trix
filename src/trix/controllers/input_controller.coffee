@@ -252,19 +252,19 @@ class Trix.InputController extends Trix.BasicObject
         @requestRender()
         @delegate?.inputControllerDidPaste(pasteData)
 
+      else if html = paste.getData("text/html")
+        pasteData.html = html
+        @delegate?.inputControllerWillPasteText(pasteData)
+        @responder?.insertHTML(html)
+        @requestRender()
+        @delegate?.inputControllerDidPaste(pasteData)
+
       else if dataTransferIsPlainText(paste)
         string = paste.getData("text/plain")
         pasteData.string = string
         @setInputSummary(textAdded: string, didDelete: @selectionIsExpanded())
         @delegate?.inputControllerWillPasteText(pasteData)
         @responder?.insertString(string)
-        @requestRender()
-        @delegate?.inputControllerDidPaste(pasteData)
-
-      else if html = paste.getData("text/html")
-        pasteData.html = html
-        @delegate?.inputControllerWillPasteText(pasteData)
-        @responder?.insertHTML(html)
         @requestRender()
         @delegate?.inputControllerDidPaste(pasteData)
 
