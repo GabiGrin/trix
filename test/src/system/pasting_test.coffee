@@ -19,6 +19,38 @@ testGroup "Pasting", template: "editor_empty", ->
         pasteContent "text/html", "<div>Hello world<br></div><div>This is a test</div>", ->
           expectDocument "abHello world\nThis is a test\nc\n"
 
+  test "prefers plain text when html lacks formatting", (expectDocument) ->
+    pasteData =
+      "text/html": "<meta charset='utf-8'>a\nb"
+      "text/plain": "a\nb"
+
+    pasteContent pasteData, ->
+      expectDocument "a\nb\n"
+
+  test "prefers formatted html", (expectDocument) ->
+    pasteData =
+      "text/html": "<meta charset='utf-8'>a\n<strong>b</strong>"
+      "text/plain": "a\nb"
+
+    pasteContent pasteData, ->
+      expectDocument "a b\n"
+
+  test "paste URL", (expectDocument) ->
+    typeCharacters "a", ->
+      pasteContent "URL", "http://example.com", ->
+        assert.textAttributes([1, 18], href: "http://example.com")
+        expectDocument "ahttp://example.com\n"
+
+  test "paste URL with name", (expectDocument) ->
+    pasteData =
+      "URL": "http://example.com"
+      "public.url-name": "Example"
+      "text/plain": "http://example.com"
+
+    pasteContent pasteData, ->
+      assert.textAttributes([0, 7], href: "http://example.com")
+      expectDocument "Example\n"
+
   test "paste complex html into formatted block", (done) ->
     typeCharacters "abc", ->
       clickToolbarButton attribute: "quote", ->

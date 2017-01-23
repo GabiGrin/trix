@@ -2,7 +2,7 @@
 #= require trix/models/splittable_list
 #= require trix/models/html_parser
 
-{arraysAreEqual, normalizeRange, rangeIsCollapsed} = Trix
+{arraysAreEqual, normalizeRange, rangeIsCollapsed, getBlockConfig} = Trix
 
 class Trix.Document extends Trix.Object
   @fromJSON: (documentJSON) ->
@@ -55,6 +55,10 @@ class Trix.Document extends Trix.Object
       block.copyWithAttributes(attributes)
     new @constructor blocks
 
+  replaceBlock: (oldBlock, newBlock) ->
+    index = @blockList.indexOf(oldBlock)
+    return this if index is -1
+    new @constructor @blockList.replaceObjectAtIndex(newBlock, index)
 
   insertDocumentAtRange: (document, range) ->
     {blockList} = document
@@ -110,32 +114,41 @@ class Trix.Document extends Trix.Object
       block.copyWithText(block.text.insertTextAtPosition(text, offset))
 
   removeTextAtRange: (range) ->
-    [startPosition, endPosition] = range = normalizeRange(range)
+    [leftPosition, rightPosition] = range = normalizeRange(range)
     return this if rangeIsCollapsed(range)
+    [leftLocation, rightLocation] = @locationRangeFromRange(range)
 
-    leftLocation = @locationFromPosition(startPosition)
     leftIndex = leftLocation.index
+    leftOffset = leftLocation.offset
     leftBlock = @getBlockAtIndex(leftIndex)
-    leftText = leftBlock.text.getTextAtRange([0, leftLocation.offset])
 
-    rightLocation = @locationFromPosition(endPosition)
     rightIndex = rightLocation.index
+    rightOffset = rightLocation.offset
     rightBlock = @getBlockAtIndex(rightIndex)
-    rightText = rightBlock.text.getTextAtRange([rightLocation.offset, rightBlock.getLength()])
 
-    text = leftText.appendText(rightText)
+    removeRightNewline = rightPosition - leftPosition is 1 and
+      leftBlock.getBlockBreakPosition() is leftOffset and
+      rightBlock.getBlockBreakPosition() isnt rightOffset and
+      rightBlock.text.getStringAtPosition(rightOffset) is "\n"
 
-    removingLeftBlock = leftIndex isnt rightIndex and leftLocation.offset is 0
-    useRightBlock = removingLeftBlock and leftBlock.getAttributeLevel() >= rightBlock.getAttributeLevel()
-
-    if useRightBlock
-      block = rightBlock.copyWithText(text)
+    if removeRightNewline
+      blocks = @blockList.editObjectAtIndex rightIndex, (block) ->
+        block.copyWithText(block.text.removeTextAtRange([rightOffset, rightOffset + 1]))
     else
-      block = leftBlock.copyWithText(text)
+      leftText = leftBlock.text.getTextAtRange([0, leftOffset])
+      rightText = rightBlock.text.getTextAtRange([rightOffset, rightBlock.getLength()])
+      text = leftText.appendText(rightText)
 
-    blocks = @blockList.toArray()
-    affectedBlockCount = rightIndex + 1 - leftIndex
-    blocks.splice(leftIndex, affectedBlockCount, block)
+      removingLeftBlock = leftIndex isnt rightIndex and leftOffset is 0
+      useRightBlock = removingLeftBlock and leftBlock.getAttributeLevel() >= rightBlock.getAttributeLevel()
+
+      if useRightBlock
+        block = rightBlock.copyWithText(text)
+      else
+        block = leftBlock.copyWithText(text)
+
+      affectedBlockCount = rightIndex + 1 - leftIndex
+      blocks = @blockList.splice(leftIndex, affectedBlockCount, block)
 
     new @constructor blocks
 
@@ -169,7 +182,7 @@ class Trix.Document extends Trix.Object
     blockList = @blockList
     @eachBlockAtRange range, (block, textRange, index) ->
       blockList = blockList.editObjectAtIndex index, ->
-        if Trix.config.blockAttributes[attribute]
+        if getBlockConfig(attribute)
           block.addAttribute(attribute, value)
         else
           if textRange[0] is textRange[1]
@@ -188,7 +201,7 @@ class Trix.Document extends Trix.Object
   removeAttributeAtRange: (attribute, range) ->
     blockList = @blockList
     @eachBlockAtRange range, (block, textRange, index) ->
-      if Trix.config.blockAttributes[attribute]
+      if getBlockConfig(attribute)
         blockList = blockList.editObjectAtIndex index, ->
           block.removeAttribute(attribute)
       else if textRange[0] isnt textRange[1]
@@ -218,10 +231,13 @@ class Trix.Document extends Trix.Object
 
   applyBlockAttributeAtRange: (attributeName, value, range) ->
     {document, range} = @expandRangeToLineBreaksAndSplitBlocks(range)
+    config = getBlockConfig(attributeName)
 
-    if Trix.config.blockAttributes[attributeName].listAttribute
+    if config.listAttribute
       document = document.removeLastListAttributeAtRange(range, exceptAttributeName: attributeName)
       {document, range} = document.convertLineBreaksToBlockBreaksInRange(range)
+    else if config.terminal
+      document = document.removeLastTerminalAttributeAtRange(range)
     else
       document = document.consolidateBlocksAtRange(range)
 
@@ -231,8 +247,17 @@ class Trix.Document extends Trix.Object
     blockList = @blockList
     @eachBlockAtRange range, (block, textRange, index) ->
       return unless lastAttributeName = block.getLastAttribute()
-      return unless Trix.config.blockAttributes[lastAttributeName].listAttribute
+      return unless getBlockConfig(lastAttributeName).listAttribute
       return if lastAttributeName is options.exceptAttributeName
+      blockList = blockList.editObjectAtIndex index, ->
+        block.removeAttribute(lastAttributeName)
+    new @constructor blockList
+
+  removeLastTerminalAttributeAtRange: (range) ->
+    blockList = @blockList
+    @eachBlockAtRange range, (block, textRange, index) ->
+      return unless lastAttributeName = block.getLastAttribute()
+      return unless getBlockConfig(lastAttributeName).terminal
       blockList = blockList.editObjectAtIndex index, ->
         block.removeAttribute(lastAttributeName)
     new @constructor blockList
@@ -325,7 +350,7 @@ class Trix.Document extends Trix.Object
 
   getPieceAtPosition: (position) ->
     {index, offset} = @locationFromPosition(position)
-    @getTextAtIndex(index).getPieceAtPosition(position)
+    @getTextAtIndex(index).getPieceAtPosition(offset)
 
   getCharacterAtPosition: (position) ->
     {index, offset} = @locationFromPosition(position)
@@ -447,6 +472,10 @@ class Trix.Document extends Trix.Object
         return normalizeRange([position + textRange[0], position + textRange[1]])
       position += text.getLength()
     return
+
+  getLocationRangeOfAttachment: (attachment) ->
+    range = @getRangeOfAttachment(attachment)
+    @locationRangeFromRange(range)
 
   getAttachmentPieceForAttachment: (attachment) ->
     return piece for piece in @getAttachmentPieces() when piece.attachment is attachment

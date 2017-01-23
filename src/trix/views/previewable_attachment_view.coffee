@@ -1,6 +1,6 @@
 #= require trix/views/attachment_view
 
-{defer, makeElement, measureElement} = Trix
+{makeElement} = Trix
 
 class Trix.PreviewableAttachmentView extends Trix.AttachmentView
   constructor: ->
@@ -14,7 +14,6 @@ class Trix.PreviewableAttachmentView extends Trix.AttachmentView
         src: ""
       data:
         trixMutable: true
-        trixStoreKey: @attachment.getCacheKey("imageElement")
 
     @refresh(@image)
     [@image]
@@ -25,10 +24,10 @@ class Trix.PreviewableAttachmentView extends Trix.AttachmentView
 
   updateAttributesForImage: (image) ->
     url = @attachment.getURL()
-    preloadedURL = @attachment.getPreloadedURL()
-    image.src = preloadedURL or url
+    previewURL = @attachment.getPreviewURL()
+    image.src = previewURL or url
 
-    if preloadedURL is url
+    if previewURL is url
       image.removeAttribute("data-trix-serialized-attributes")
     else
       serializedAttributes = JSON.stringify(src: url)
@@ -40,8 +39,11 @@ class Trix.PreviewableAttachmentView extends Trix.AttachmentView
     image.width = width if width?
     image.height = height if height?
 
+    storeKey = ["imageElement", @attachment.id, image.src, image.width, image.height].join("/")
+    image.dataset.trixStoreKey = storeKey
+
   # Attachment delegate
 
-  attachmentDidPreload: ->
+  attachmentDidChangePreviewURL: ->
     @refresh(@image)
     @refresh()

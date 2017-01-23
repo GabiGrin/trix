@@ -171,8 +171,8 @@ removeWhitespace = (string) ->
     attachment = new Trix.Attachment attrs
     text = Trix.Text.textForAttachmentWithAttributes(attachment)
 
-    key = attachment.getCacheKey("imageElement")
-    image = Trix.makeElement("img", src: attrs.url, "data-trix-mutable": true, "data-trix-store-key": key, width: 1, height: 1)
+    image = Trix.makeElement("img", src: attrs.url, "data-trix-mutable": true, width: 1, height: 1)
+    image.dataset.trixStoreKey = ["imageElement", attachment.id, image.src, image.width, image.height].join("/")
 
     caption = Trix.makeElement(tagName: "figcaption", className: classNames.attachment.caption)
     caption.innerHTML = """#{attrs.filename} <span class="#{classNames.attachment.size}">95.9 KB</span>"""
@@ -208,8 +208,8 @@ removeWhitespace = (string) ->
     attachment = new Trix.Attachment attrs
     attachmentText = Trix.Text.textForAttachmentWithAttributes(attachment)
 
-    key = attachment.getCacheKey("imageElement")
-    image = Trix.makeElement("img", src: attrs.url, "data-trix-mutable": true, "data-trix-store-key": key, width: 1, height: 1)
+    image = Trix.makeElement("img", src: attrs.url, "data-trix-mutable": true, width: 1, height: 1)
+    image.dataset.trixStoreKey = ["imageElement", attachment.id, image.src, image.width, image.height].join("/")
 
     caption = Trix.makeElement(tagName: "figcaption", className: classNames.attachment.caption)
     caption.innerHTML = """#{attrs.filename} <span class="#{classNames.attachment.size}">95.9 KB</span>"""
@@ -246,8 +246,8 @@ removeWhitespace = (string) ->
     textAttrs = caption: "Example"
     text = Trix.Text.textForAttachmentWithAttributes(attachment, textAttrs)
 
-    key = attachment.getCacheKey("imageElement")
-    image = Trix.makeElement("img", src: attrs.url, "data-trix-mutable": true, "data-trix-store-key": key, width: 1, height: 1)
+    image = Trix.makeElement("img", src: attrs.url, "data-trix-mutable": true, width: 1, height: 1)
+    image.dataset.trixStoreKey = ["imageElement", attachment.id, image.src, image.width, image.height].join("/")
 
     caption = Trix.makeElement(tagName: "figcaption", className: "#{classNames.attachment.caption} #{classNames.attachment.captionEdited}", textContent: "Example")
 
@@ -292,6 +292,41 @@ removeWhitespace = (string) ->
     figure.innerHTML = caption
 
     html: """<div>#{blockComment}#{cursorTarget}#{link.outerHTML}#{cursorTarget}</div>"""
+    document: new Trix.Document [new Trix.Block text]
+
+  "pending file attachment": do ->
+    attrs = filename: "example.pdf", filesize: 34038769, contentType: "application/pdf"
+    attachment = new Trix.Attachment attrs
+    attachment.file = {}
+    text = Trix.Text.textForAttachmentWithAttributes(attachment)
+
+    figure = Trix.makeElement
+      tagName: "figure"
+      className: "attachment attachment-file pdf"
+
+    data =
+      trixAttachment: JSON.stringify(attachment)
+      trixContentType: "application/pdf"
+      trixId: attachment.id
+      trixSerialize: false
+
+    figure.dataset[key] = value for key, value of data
+    figure.setAttribute("contenteditable", false)
+
+    progress = Trix.makeElement
+      tagName: "progress"
+      attributes:
+        class: "progress"
+        value: 0
+        max: 100
+      data:
+        trixMutable: true
+        trixStoreKey: ["progressElement", attachment.id].join("/")
+
+    caption = """<figcaption class="#{classNames.attachment.caption}">#{attrs.filename} <span class="#{classNames.attachment.size}">32.46 MB</span></figcaption>"""
+    figure.innerHTML = caption + progress.outerHTML
+
+    html: """<div>#{blockComment}#{cursorTarget}#{figure.outerHTML}#{cursorTarget}</div>"""
     document: new Trix.Document [new Trix.Block text]
 
   "content attachment": do ->
@@ -479,6 +514,22 @@ removeWhitespace = (string) ->
   "text with newlines before block":
     document: createDocument(["a\nb"], ["c", {}, ["quote"]])
     html: "<div>#{blockComment}a<br>b</div><blockquote>#{blockComment}c</blockquote>"
+
+  "empty heading block":
+    document: createDocument(["", {}, ["heading1"]])
+    html: "<h1>#{blockComment}<br></h1>"
+
+  "two adjacent headings":
+    document: createDocument( ["a", {}, ["heading1"]], ["b", {}, ["heading1"]])
+    html: "<h1>#{blockComment}a</h1><h1>#{blockComment}b</h1>"
+
+  "heading in ordered list":
+    document: createDocument(["a", {}, ["numberList", "number", "heading1"]])
+    html: "<ol><li><h1>#{blockComment}a</h1></li></ol>"
+
+  "headings with formatted text":
+    document: createDocument(["a", { bold: true }, ["heading1"]], ["b", { italic: true, bold: true }, ["heading1"]])
+    html: "<h1>#{blockComment}<strong>a</strong></h1><h1>#{blockComment}<strong><em>b</em></strong></h1>"
 
 @eachFixture = (callback) ->
   for name, details of @fixtures

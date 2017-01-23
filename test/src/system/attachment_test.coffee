@@ -13,7 +13,7 @@ testGroup "Attachments", template: "editor_with_image", ->
   test "removing an image", (expectDocument) ->
     after 20, ->
       clickElement getFigure(), ->
-        closeButton = getFigure().querySelector(".#{Trix.config.css.classNames.attachment.removeButton}")
+        closeButton = getFigure().querySelector(".#{Trix.config.css.classNames.attachment.removeButton.split(" ").join(".")}")
         clickElement closeButton, ->
           expectDocument "ab\n"
 
@@ -28,6 +28,7 @@ testGroup "Attachments", template: "editor_with_image", ->
             pressKey "return", ->
               assert.notOk findElement("textarea")
               assert.textAttributes [2, 3], caption: "my caption"
+              assert.locationRange index: 0, offset: 3
               expectDocument "ab#{Trix.OBJECT_REPLACEMENT_CHARACTER}\n"
 
   test "editing an attachment caption with no filename", (done) ->

@@ -1,7 +1,7 @@
 #= require trix/elements/trix_toolbar_element
 #= require trix/controllers/editor_controller
 
-{makeElement, selectionElements, triggerEvent, handleEvent, handleEventOnce, defer} = Trix
+{makeElement, selectionElements, triggerEvent, handleEvent, handleEventOnce} = Trix
 
 {attachmentSelector} = Trix.AttachmentView
 
@@ -139,10 +139,10 @@ Trix.registerElement "trix-editor", do ->
 
   attachedCallback: ->
     unless @hasAttribute("data-trix-internal")
-      autofocus(this)
       @editorController ?= new Trix.EditorController(editorElement: this, html: @defaultValue = @value)
       @editorController.registerSelectionManager()
       @registerResetListener()
+      autofocus(this)
       requestAnimationFrame => @notify("initialize")
 
   detachedCallback: ->
